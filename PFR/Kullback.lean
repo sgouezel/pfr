@@ -55,10 +55,14 @@ lemma KL_div_eq_sum [Fintype G] :
   tsum_eq_sum (by simp)
 
 /-- `KL(X ‖ Y) ≥ 0`.-/
-lemma KL_div_nonneg [Fintype G] [MeasurableSingletonClass G] [IsProbabilityMeasure μ]
-    [IsProbabilityMeasure μ'] (hX : Measurable X) (hY : Measurable Y)
+lemma KL_div_nonneg [Fintype G] [MeasurableSingletonClass G] [IsZeroOrProbabilityMeasure μ]
+    [IsZeroOrProbabilityMeasure μ'] (hX : Measurable X) (hY : Measurable Y)
     (habs : ∀ x, μ'.map Y {x} = 0 → μ.map X {x} = 0) : 0 ≤ KL[X ; μ # Y ; μ'] := by
   rw [KL_div_eq_sum]
+  rcases eq_zero_or_isProbabilityMeasure μ with rfl | hμ
+  · simp
+  rcases eq_zero_or_isProbabilityMeasure μ' with rfl | hμ'
+  · simp
   apply le_trans ?_ (sum_mul_log_div_leq (by simp) (by simp) ?_)
   · have : IsProbabilityMeasure (μ'.map Y) := isProbabilityMeasure_map hY.aemeasurable
     have : IsProbabilityMeasure (μ.map X) := isProbabilityMeasure_map hX.aemeasurable
@@ -100,7 +104,7 @@ lemma KL_div_eq_zero_iff_identDistrib [Fintype G] [MeasurableSingletonClass G]
 and ${\bf P}(X=x) = \sum_{s\in S} w_s {\bf P}(X_s=x)$, ${\bf P}(Y=x) =
   \sum_{s\in S} w_s {\bf P}(Y_s=x)$ for all $x$, then
 $$D_{KL}(X\Vert Y) \le \sum_{s\in S} w_s D_{KL}(X_s\Vert Y_s).$$ -/
-lemma KL_div_of_convex [Fintype G] [MeasurableSingletonClass G] [IsFiniteMeasure μ''']
+lemma KL_div_of_convex [Fintype G] [IsFiniteMeasure μ''']
     {ι : Type*} {S : Finset ι} {w : ι → ℝ} (hw : ∀ s ∈ S, 0 ≤ w s)
     (X' : ι → Ω'' → G) (Y' : ι → Ω''' → G)
     (hconvex : ∀ x, (μ.map X {x}).toReal = ∑ s ∈ S, (w s) * (μ''.map (X' s) {x}).toReal)
@@ -136,10 +140,11 @@ lemma KL_div_of_convex [Fintype G] [MeasurableSingletonClass G] [IsFiniteMeasure
 lemma KL_div_of_comp_inj {H : Type*} [MeasurableSpace H] [DiscreteMeasurableSpace G]
     [MeasurableSingletonClass H] {f : G → H}
     (hf : Function.Injective f) (hX : Measurable X) (hY : Measurable Y) :
-    KL[X ; μ # Y ; μ'] = KL[f ∘ X ; μ # f ∘ Y ; μ'] := by
-  simp [KL_div]
+    KL[f ∘ X ; μ # f ∘ Y ; μ'] = KL[X ; μ # Y ; μ'] := by
+  simp only [KL_div]
   rw [← hf.tsum_eq]
-  · congr with x
+  · symm
+    congr with x
     have : (Measure.map X μ) {x} = (Measure.map (f ∘ X) μ) {f x} := by
       rw [Measure.map_apply, Measure.map_apply]
       · congr
@@ -169,31 +174,156 @@ lemma KL_div_of_comp_inj {H : Type*} [MeasurableSpace H] [DiscreteMeasurableSpac
     simp only [Set.mem_preimage, Function.comp_apply, Set.mem_singleton_iff] at hz
     exact Set.mem_range.2 ⟨X z, hz⟩
 
+open Set
+
+open scoped Pointwise
+
+/-- The distribution of `X + Z` is the convolution of the distributions of `Z` and `X` when these
+random variables are independent.
+Probably already available somewhere in some form, but I couldn't locate it. -/
+lemma ProbabilityTheory.IndepFun.map_add_eq_sum
+    [Fintype G] [AddCommGroup G] [DiscreteMeasurableSpace G]
+    {X Z : Ω → G} (hindep : IndepFun X Z μ)
+    (hX : Measurable X) (hZ : Measurable Z) (S : Set G) :
+    μ.map (X + Z) S = ∑ s, μ.map Z {s} * μ.map X ({-s} + S) := by
+  rw [Measure.map_apply (by fun_prop) (DiscreteMeasurableSpace.forall_measurableSet S)]
+  have : (X + Z) ⁻¹' S = ⋃ s, X ⁻¹' ({-s} + S) ∩ Z ⁻¹' {s} := by
+    apply Subset.antisymm
+    · intro y hy
+      simp only [mem_iUnion, mem_inter_iff, mem_preimage, mem_singleton_iff, exists_and_left,
+        exists_prop]
+      simp at hy
+      exact ⟨Z y, by simpa [add_comm] using hy, rfl⟩
+    · simp only [iUnion_subset_iff]
+      intro i y hy
+      simp only [singleton_add, image_add_left, neg_neg, mem_inter_iff, mem_preimage,
+        mem_singleton_iff] at hy
+      simp [hy.1, hy.2, add_comm]
+  rw [this, measure_iUnion, tsum_fintype]; rotate_left
+  · intro i j hij
+    simp [Function.onFun]
+    apply Disjoint.inter_left'
+    apply Disjoint.inter_right'
+    apply disjoint_left.2 (fun a ha hb ↦ ?_)
+    simp [← neg_eq_iff_eq_neg] at ha hb
+    rw [← ha, ← hb] at hij
+    exact hij rfl
+  · intro i
+    exact (hX (DiscreteMeasurableSpace.forall_measurableSet _)).inter (hZ (measurableSet_singleton _))
+  congr with i
+  rw [hindep.measure_inter_preimage_eq_mul _ _ (DiscreteMeasurableSpace.forall_measurableSet _)
+    (measurableSet_singleton _), mul_comm,
+    Measure.map_apply hZ (measurableSet_singleton _),
+    Measure.map_apply hX (DiscreteMeasurableSpace.forall_measurableSet _)]
+
+/-- The distribution of `X + Z` is the convolution of the distributions of `Z` and `X` when these
+random variables are independent.
+Probably already available somewhere in some form, but I couldn't locate it. -/
+lemma ProbabilityTheory.IndepFun.map_add_singleton_eq_sum
+    [Fintype G] [AddCommGroup G] [DiscreteMeasurableSpace G]
+    {X Z : Ω → G} (hindep : IndepFun X Z μ)
+    (hX : Measurable X) (hZ : Measurable Z) (x : G) :
+    μ.map (X + Z) {x} = ∑ s, μ.map Z {s} * μ.map X {x - s} := by
+  rw [hindep.map_add_eq_sum hX hZ]
+  congr with s
+  congr
+  simp
+  abel
+
 /-- If $X, Y, Z$ are independent $G$-valued random variables, then
   $$D_{KL}(X+Z\Vert Y+Z) \leq D_{KL}(X\Vert Y).$$ -/
-lemma KL_div_add_le_KL_div_of_indep [AddCommGroup G] [MeasurableSub₂ G] [MeasurableAdd₂ G]
-    {X Y Z : Ω → G} [FiniteRange X] [FiniteRange Y] [FiniteRange Z]
-    (hindep : iIndepFun (fun _ ↦ hG) ![X, Y, Z] μ) :
-    KL[X + Z ; μ # Y + Z ; μ] ≤ KL[X ; μ # Y ; μ] := sorry
+lemma KL_div_add_le_KL_div_of_indep [Fintype G] [AddCommGroup G] [DiscreteMeasurableSpace G]
+    {X Y Z : Ω → G} [IsZeroOrProbabilityMeasure μ]
+    (hindep : IndepFun (⟨X, Y⟩) Z μ)
+    (hX : Measurable X) (hY : Measurable Y) (hZ : Measurable Z)
+    (habs : ∀ x, μ.map Y {x} = 0 → μ.map X {x} = 0) :
+    KL[X + Z ; μ # Y + Z ; μ] ≤ KL[X ; μ # Y ; μ] := by
+  rcases eq_zero_or_isProbabilityMeasure μ with rfl | hμ
+  · simp [KL_div]
+  set X' : G → Ω → G := fun s ↦ (· + s) ∘ X with hX'
+  set Y' : G → Ω → G := fun s ↦ (· + s) ∘ Y with hY'
+  have AX' x i : μ.map (X' i) {x} = μ.map X {x - i} := by
+    rw [hX', ← Measure.map_map (by fun_prop) (by fun_prop),
+      Measure.map_apply (by fun_prop) (measurableSet_singleton x)]
+    congr
+    ext y
+    simp [sub_eq_add_neg]
+  have AY' x i : μ.map (Y' i) {x} = μ.map Y {x - i} := by
+    rw [hY', ← Measure.map_map (by fun_prop) (by fun_prop),
+      Measure.map_apply (by fun_prop) (measurableSet_singleton x)]
+    congr
+    ext y
+    simp [sub_eq_add_neg]
+  let w : G → ℝ := fun s ↦ (μ.map Z {s}).toReal
+  let S : Finset G := Finset.univ
+  have sum_w : ∑ s, w s = 1 := by
+    have : IsProbabilityMeasure (μ.map Z) := isProbabilityMeasure_map hZ.aemeasurable
+    simp [w]
+  have A x : (μ.map (X + Z) {x}).toReal = ∑ s ∈ S, w s * (μ.map (X' s) {x}).toReal := by
+    have : IndepFun X Z μ := hindep.comp (φ := Prod.fst) (ψ := id) measurable_fst measurable_id
+    rw [this.map_add_singleton_eq_sum hX hZ, ENNReal.toReal_sum (by simp [ENNReal.mul_eq_top])]
+    simp only [ENNReal.toReal_mul]
+    congr with i
+    congr 1
+    rw [AX']
+  have B x : (μ.map (Y + Z) {x}).toReal = ∑ s ∈ S, w s * (μ.map (Y' s) {x}).toReal := by
+    have : IndepFun Y Z μ := hindep.comp (φ := Prod.snd) (ψ := id) measurable_snd measurable_id
+    rw [this.map_add_singleton_eq_sum hY hZ, ENNReal.toReal_sum (by simp [ENNReal.mul_eq_top])]
+    simp only [ENNReal.toReal_mul]
+    congr with i
+    congr 1
+    rw [AY']
+  have : KL[X + Z ; μ # Y + Z; μ] ≤ ∑ s ∈ S, w s * KL[X' s ; μ # Y' s ; μ] := by
+    apply KL_div_of_convex (fun s _ ↦ by simp [w])
+    · exact A
+    · exact B
+    · intro s _ x
+      rw [AX', AY']
+      exact habs _
+  apply this.trans_eq
+  have C s : KL[X' s ; μ # Y' s ; μ] = KL[X ; μ # Y ; μ] :=
+    KL_div_of_comp_inj (add_left_injective s) hX hY
+  simp_rw [C, ← Finset.sum_mul, sum_w, one_mul]
 
 /-- If $X,Y,Z$ are random variables, with $X,Z$ defined on the same sample space, we define
 $$ D_{KL}(X|Z \Vert Y) := \sum_z \mathbf{P}(Z=z) D_{KL}( (X|Z=z) \Vert Y).$$ -/
-noncomputable def condKL_div {S: Type*} (X: Ω → G) (Y: Ω' → G) (Z: Ω → S)
+noncomputable def condKL_div {S: Type*} (X : Ω → G) (Y : Ω' → G) (Z : Ω → S)
     (μ : Measure Ω := by volume_tac) (μ' : Measure Ω' := by volume_tac) : ℝ :=
   ∑' z, (μ (Z⁻¹' {z})).toReal * KL[X ; (ProbabilityTheory.cond μ (Z⁻¹' {z})) # Y ; μ']
 
+@[inherit_doc condKL_div]
+notation3:max "KL[" X " | " Z " ; " μ " # " Y " ; " μ' "]" => condKL_div X Y Z μ μ'
 
-@[inherit_doc condKL_div] notation3:max "KL[" X " | " Z " ; " μ " # " Y " ; " μ' "]" => condKL_div X Y Z μ μ'
+@[inherit_doc condKL_div]
+notation3:max "KL[" X " | " Z " # " Y "]" => condKL_div X Y Z volume volume
 
-@[inherit_doc condKL_div] notation3:max "KL[" X " | " Z " # " Y "]" => condKL_div X Y Z volume volume
-
-/-- If $X, Y$ are independent $G$-valued random variables, and $Z$ is another random variable defined on the same sample space as $X$, then
+/-- If $X, Y$ are independent $G$-valued random variables, and $Z$ is another random variable
+  defined on the same sample space as $X$, then
   $$D_{KL}((X|Z)\Vert Y) = D_{KL}(X\Vert Y) + \bbH[X] - \bbH[X|Z].$$ -/
-lemma condKL_div_eq {S: Type*} [MeasurableSpace S] (X : Ω → G) (Y : Ω' → G) (Z : Ω → S)
-    (μ : Measure Ω := by volume_tac) (μ' : Measure Ω' := by volume_tac) :
-    KL[ X | Z; μ # Y ; μ'] = KL[X ; μ # Y ; μ'] + H[X ; μ] - H[ X | Z ; μ] := sorry
+lemma condKL_div_eq {S : Type*} [MeasurableSpace S] [Fintype S] [MeasurableSingletonClass S]
+    [Fintype G] [MeasurableSingletonClass G]
+    {X : Ω → G} {Y : Ω' → G} {Z : Ω → S}
+    [IsZeroOrProbabilityMeasure μ]
+    (hX : Measurable X) (hY : Measurable Y) (hZ : Measurable Z) :
+    KL[ X | Z; μ # Y ; μ'] = KL[X ; μ # Y ; μ'] + H[X ; μ] - H[ X | Z ; μ] := by
+  rcases eq_zero_or_isProbabilityMeasure μ with rfl | hμ
+  · simp [condKL_div, tsum_fintype, KL_div_eq_sum, Finset.mul_sum, entropy_eq_sum]
+  simp only [condKL_div, tsum_fintype, KL_div_eq_sum, Finset.mul_sum, entropy_eq_sum]
+  rw [Finset.sum_comm, condEntropy_eq_sum_sum hX hZ]
+  simp only [negMulLog, neg_mul, Finset.sum_neg_distrib, mul_neg, sub_neg_eq_add]
+  sorry
 
 /-- `KL(X|Z ‖ Y) ≥ 0`.-/
-lemma condKL_div_nonneg {S : Type*} (X : Ω → G) (Y : Ω' → G) (Z : Ω → S)
-    (μ : Measure Ω := by volume_tac) (μ' : Measure Ω' := by volume_tac) :
-    0 ≤ KL[X | Z; μ # Y ; μ'] := sorry
+lemma condKL_div_nonneg {S : Type*} [MeasurableSingletonClass G] [Fintype G]
+    {X : Ω → G} {Y : Ω' → G} {Z : Ω → S}
+    [IsZeroOrProbabilityMeasure μ']
+    (hX : Measurable X) (hY : Measurable Y)
+    (habs : ∀ x, μ'.map Y {x} = 0 → μ.map X {x} = 0) :
+    0 ≤ KL[X | Z; μ # Y ; μ'] := by
+  rw [condKL_div]
+  refine tsum_nonneg (fun i ↦ mul_nonneg (by simp) ?_)
+  apply KL_div_nonneg hX hY
+  intro s hs
+  specialize habs s hs
+  rw [Measure.map_apply hX (measurableSet_singleton s)] at habs ⊢
+  exact cond_absolutelyContinuous habs
