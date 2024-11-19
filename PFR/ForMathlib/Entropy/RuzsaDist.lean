@@ -272,18 +272,20 @@ lemma rdist_nonneg [IsProbabilityMeasure μ] [IsProbabilityMeasure μ']
   linarith [ge_trans (diff_ent_le_rdist hX hY) (abs_nonneg (H[X ; μ] - H[Y ; μ']))]
 
 /-- If $G$ is an additive group and $X$ is a $G$-valued random variable and
-$H\leq G$ is a finite subgroup then, with $\pi:G\to G/H$ the natural homomorphism we have
-(where $U_H$ is uniform on $H$) $\mathbb{H}(\pi(X))\leq 2d[X;U_H].$ -/
-lemma ent_of_proj_le {UH: Ω' → G} [FiniteRange UH]
+$H\leq G$ is a finite subgroup then, with $\pi:G\to G/H$ the natural homomorphism, we can express
+the Rusza distance between $X$ and $U_H$ (where $U_H$ is uniform on $H$) in terms of entropy
+of $UH$ and $X$, and the entropy of $\pi X$. -/
+lemma rdist_eq_ent_proj_add {UH : Ω' → G} [FiniteRange UH]
     [IsProbabilityMeasure μ] [IsProbabilityMeasure μ']
     (hX : Measurable X) (hU : Measurable UH) {H : AddSubgroup G} (hH : Set.Finite (H : Set G)) -- TODO: infer from [FiniteRange UH]?
     (hunif : IsUniform H UH μ') :
-    H[(QuotientAddGroup.mk' H) ∘ X; μ] ≤ 2 * d[X; μ # UH ; μ'] := by
+    d[X ; μ # UH ; μ'] = H[(QuotientAddGroup.mk' H) ∘ X ; μ] + (H[UH ; μ'] - H[X ; μ]) / 2 := by
   obtain ⟨ν, X', UH', hν, hX', hUH', h_ind, h_id_X', h_id_UH', _, _⟩ :=
     independent_copies_finiteRange hX hU μ μ'
   replace hunif : IsUniform H UH' ν :=
     IsUniform.of_identDistrib hunif h_id_UH'.symm .of_discrete
-  rewrite [← (h_id_X'.comp (by fun_prop)).entropy_eq, ← h_id_X'.rdist_eq h_id_UH']
+  rewrite [← (h_id_X'.comp (by fun_prop)).entropy_eq, ← h_id_X'.rdist_eq h_id_UH',
+    ← h_id_UH'.entropy_eq, ← h_id_X'.entropy_eq]
   let π := ⇑(QuotientAddGroup.mk' H)
   let νq := Measure.map (π ∘ X') ν
   haveI : Countable (HasQuotient.Quotient G H) := Quotient.countable
@@ -353,10 +355,19 @@ lemma ent_of_proj_le {UH: Ω' → G} [FiniteRange UH]
     _ = H[π ∘ X' ; ν] + H[UH' ; ν] := by
       rewrite [chain_rule ν (by exact hX'.sub hUH') .of_discrete]
       congr
-  have : d[X' ; ν # UH' ; ν] = H[π ∘ X' ; ν] + (H[UH' ; ν] - H[X' ; ν]) / 2 := by
-    rewrite [h_ind.rdist_eq hX' hUH']
-    linarith only [this]
-  linarith only [this, (abs_le.mp (diff_ent_le_rdist hX' hUH' (μ := ν) (μ' := ν))).2]
+  rewrite [h_ind.rdist_eq hX' hUH']
+  linarith only [this]
+
+/-- If $G$ is an additive group and $X$ is a $G$-valued random variable and
+$H\leq G$ is a finite subgroup then, with $\pi:G\to G/H$ the natural homomorphism we have
+(where $U_H$ is uniform on $H$) $\mathbb{H}(\pi(X))\leq 2d[X;U_H].$ -/
+lemma ent_of_proj_le {UH: Ω' → G} [FiniteRange UH]
+    [IsProbabilityMeasure μ] [IsProbabilityMeasure μ']
+    (hX : Measurable X) (hU : Measurable UH) {H : AddSubgroup G} (hH : Set.Finite (H : Set G)) -- TODO: infer from [FiniteRange UH]?
+    (hunif : IsUniform H UH μ') :
+    H[(QuotientAddGroup.mk' H) ∘ X; μ] ≤ 2 * d[X; μ # UH ; μ'] := by
+  have := rdist_eq_ent_proj_add hX hU hH hunif (μ := μ) (μ' := μ')
+  linarith only [this, (abs_le.mp (diff_ent_le_rdist hX hU (μ := μ) (μ' := μ'))).2]
 
 /-- Adding a constant to a random variable does not change the Rusza distance. -/
 lemma rdist_add_const [IsZeroOrProbabilityMeasure μ] [IsZeroOrProbabilityMeasure μ']

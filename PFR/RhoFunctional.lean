@@ -445,27 +445,21 @@ lemma exists_mem_measure_add (H : AddSubgroup G) :
     simp [singleton_subset_iff, mem_vadd_set_iff_neg_vadd_mem, H.zero_mem]
 
 lemma exists_measure_add_eq_sSup (H : AddSubgroup G) :
-    ∃ t : G, (a (t +ᵥ (H : Set G))).toReal
-        = sSup {(a (t +ᵥ (H : Set G))).toReal | t : G}
+    ∃ t : G, (a (t +ᵥ (H : Set G))).toReal = sSup {(a (t +ᵥ (H : Set G))).toReal | t : G}
       ∧ 0 < (a (t +ᵥ (H : Set G))).toReal := by
   set k := sSup {(a (t +ᵥ (H : Set G))).toReal | t : G}
   rcases exists_mem_measure_add H (a := a) with ⟨n, n_pos, hn⟩
-  have : k ∈ {(a (t +ᵥ (H : Set G))).toReal | t : G} := by
-    apply Nonempty.csSup_mem
-
---    Nat.sSup_mem ⟨n, hn⟩ bddAbove_card_inter_add
+  have : k ∈ {(a (t +ᵥ (H : Set G))).toReal | t : G} := Nonempty.csSup_mem ⟨n, hn⟩ (toFinite _)
   rcases this with ⟨t, ht⟩
-  have : 0 < Nat.card (A ∩ (t +ᵥ (H : Set G)) : Set G) := by
+  have : 0 < (a (t +ᵥ (H : Set G))).toReal := by
     apply lt_of_lt_of_le n_pos
     rw [ht]
-    exact le_csSup bddAbove_card_inter_add hn
+    exact le_csSup bddAbove_measure_add hn
   exact ⟨t, ht, this⟩
-
-#exit
 
 private lemma le_rhoMinus_of_subgroup [IsProbabilityMeasure μ] {H : AddSubgroup G}
     {U : Ω → G} (hunif : IsUniform H U μ) (hU : Measurable U) :
-    - log (sSup {(a (t +ᵥ (H : Set G))).toReal | t : G} : ℕ) ≤ ρ⁻[U ; μ # a] := by
+    - log (sSup {(a (t +ᵥ (H : Set G))).toReal | t : G}) ≤ ρ⁻[U ; μ # a] := by
   apply le_csInf nonempty_rhoMinusSet
   rintro - ⟨μ', hμ', habs, rfl⟩
   let T : G × G → G := Prod.fst
@@ -513,23 +507,17 @@ private lemma le_rhoMinus_of_subgroup [IsProbabilityMeasure μ] {H : AddSubgroup
     simp_rw [ENNReal.toReal_mul,
       Measure.map_apply hUA (DiscreteMeasurableSpace.forall_measurableSet _)]
     gcongr with i hi
-    apply le_csSup
-
-
-#exit
-
-    simp only [measure_univ, singleton_add, image_add_left, neg_neg, one_mul,
-      Nat.card_eq_fintype_card, Fintype.card_coe, ENNReal.toReal_div, ENNReal.toReal_nat]
-    apply Finset.sum_le_sum (fun i _ ↦ ?_)
-    gcongr
-    apply le_csSup bddAbove_card_inter_add
-    rw [inter_comm]
+    apply le_csSup bddAbove_measure_add
+    simp only [singleton_add, image_add_left, neg_neg, mem_setOf_eq]
     refine ⟨-i, ?_⟩
+    congr 1
+    have : Measure.map UA ℙ = a := by simp [hprod, UA, map_snd_prod]
+    rw [← Measure.map_apply hUA (DiscreteMeasurableSpace.forall_measurableSet _), this]
     congr
-    ext j
+    ext z
     simp [H', mem_vadd_set_iff_neg_vadd_mem]
   rw [one_mul] at I₃
-  have : - log ((sSup {Nat.card (A ∩ (t +ᵥ (H : Set G)) : Set G) | t : G}) / Nat.card A) ≤
+  have : - log (sSup {(a (t +ᵥ (H : Set G))).toReal | t : G}) ≤
       - log ((Measure.map (T + UA) ℙ) ↑H').toReal := by
     apply neg_le_neg
     apply log_le_log _ I₃
@@ -542,39 +530,31 @@ private lemma le_rhoMinus_of_subgroup [IsProbabilityMeasure μ] {H : AddSubgroup
     rw [Measure.map_apply hU (measurableSet_singleton 0),
       hunif'.measure_preimage_of_mem hU (by simp [H', AddSubgroup.zero_mem])] at Z
     simp at Z
-  convert this using 1
-  rw [log_div]
-  · abel
-  · norm_cast
-    rcases exists_mem_card_inter_add H hA with ⟨k, k_pos, hk⟩
-    exact (lt_of_lt_of_le k_pos (le_csSup bddAbove_card_inter_add hk)).ne'
-  · norm_cast
-    apply ne_of_gt
-    have : Nonempty { x // x ∈ A } := hA.to_subtype
-    exact Nat.card_pos
-
-#exit
+  exact this
 
 private lemma rhoMinus_le_of_subgroup [IsProbabilityMeasure μ] {H : AddSubgroup G}
-    (t : G) {U : Ω → G} (hunif : IsUniform H U μ) {A : Finset G} (hA : A.Nonempty)
-    (h'A : (A ∩ (t +ᵥ (H : Set G)) : Set G).Nonempty) (hU : Measurable U) :
-    ρ⁻[U ; μ # A] ≤
-      log (Nat.card A) - log (Nat.card (A ∩ (t +ᵥ (H : Set G)) : Set G)) := by
+    (t : G) {U : Ω → G} (hunif : IsUniform H U μ)
+    (h'A : 0 < (a (t +ᵥ (H : Set G))).toReal) (hU : Measurable U) :
+    ρ⁻[U ; μ # a] ≤ - log ((a (t +ᵥ (H : Set G))).toReal) := by
   have mapU : Measure.map U μ = uniformOn (H : Set G) :=
     hunif.map_eq_uniformOn hU (toFinite H) H.coe_nonempty
-  obtain ⟨a, ha, h'a⟩ := by exact h'A
-  rcases mem_vadd_set.1 h'a with ⟨v, vH, rfl⟩
-  simp only [vadd_eq_add, Finset.mem_coe] at ha
+  obtain ⟨v, hv, h'v⟩ : ∃ v ∈ t +ᵥ (H : Set G), a {v} ≠ 0 := by
+    by_contra! hg
+    let A : Finset G := Set.Finite.toFinset (s := t +ᵥ (H : Set G)) (toFinite _)
+    have B : 0 < ∑ g ∈ A, (a {g}).toReal := by simpa [A] using h'A
+    have C : ∑ g ∈ A, (a {g}).toReal = 0 := by
+      apply Finset.sum_eq_zero (fun g h'g ↦ ?_)
+      have : a {g} = 0 := hg _ (by simpa [A] using h'g)
+      simp [this]
+    linarith
   have P z : (fun x ↦ x - t) ⁻¹' {z} = {z + t} := by ext w; simp [sub_eq_iff_eq_add]
   set μ' := μ.map ((· - t) ∘ U) with hμ'
   have μ'_sing z : μ' {z} = uniformOn (H : Set G) {z + t} := by
     rw [hμ', ← Measure.map_map (by fun_prop) hU,
       Measure.map_apply (by fun_prop) (measurableSet_singleton _), mapU, P]
-  have : IsProbabilityMeasure (uniformOn (A : Set G)) :=
-    uniformOn_isProbabilityMeasure A.finite_toSet hA
   have : IsProbabilityMeasure μ' :=
     isProbabilityMeasure_map (Measurable.aemeasurable (by fun_prop))
-  have h_indep : IndepFun Prod.fst Prod.snd (μ'.prod (uniformOn (A : Set G))) := indepFun_fst_snd
+  have h_indep : IndepFun Prod.fst Prod.snd (μ'.prod a) := indepFun_fst_snd
   apply csInf_le (bddBelow_rhoMinusSet hU)
   simp only [rhoMinusSet, Nat.card_eq_fintype_card, Fintype.card_coe, mem_setOf_eq]
   refine ⟨μ', this, fun y h ↦ ?_, ?_⟩
@@ -583,14 +563,18 @@ private lemma rhoMinus_le_of_subgroup [IsProbabilityMeasure μ] {H : AddSubgroup
     rw [h_indep.map_add_singleton_eq_sum measurable_fst measurable_snd,
       Finset.sum_eq_zero_iff_of_nonneg (fun i _ ↦ by simp), Measure.map_snd_prod,
       Measure.map_fst_prod] at h
-    specialize h (t + v)
+    specialize h v
     simp only [Finset.mem_univ, measure_univ, one_smul,
-      uniformOn_apply_singleton_of_mem (by exact ha) A.finite_toSet, Finset.coe_sort_coe,
+      Finset.coe_sort_coe,
       Nat.card_eq_fintype_card, Fintype.card_coe, one_div, μ'_sing, mul_eq_zero, ENNReal.inv_eq_zero,
       ENNReal.natCast_ne_top, false_or, true_implies] at h
     rw [uniformOn_apply_singleton_of_mem _ (toFinite (H : Set G))] at h
-    · simp at h
-    · convert (H.sub_mem yH vH) using 1
+    · simp only [SetLike.coe_sort_coe, one_div, ENNReal.inv_eq_zero, ENNReal.natCast_ne_top,
+        or_false] at h
+      exact h'v h
+    · rw [mem_vadd_set_iff_neg_vadd_mem] at hv
+      convert (H.sub_mem yH hv) using 1
+      simp only [vadd_eq_add]
       abel
   let H' : Finset G := Set.Finite.toFinset (toFinite H)
   have hunif' : IsUniform H' U μ := by convert hunif; simp [H']
@@ -599,11 +583,15 @@ private lemma rhoMinus_le_of_subgroup [IsProbabilityMeasure μ] {H : AddSubgroup
     rw [Measure.map_apply hU (measurableSet_singleton x), hunif.measure_preimage_of_nmem]
     · simp
     · simpa [H'] using hH
+  have cardH_ne : (Nat.card H : ℝ) ≠ 0 := by
+    apply ne_of_gt
+    norm_cast
+    exact Nat.card_pos
   have : ∑ x ∈ H', ((Measure.map U μ) {x}).toReal *
       log (((Measure.map U μ) {x}).toReal
-        / ((Measure.map (Prod.fst + Prod.snd) (μ'.prod (uniformOn ↑A))) {x}).toReal)
+        / ((Measure.map (Prod.fst + Prod.snd) (μ'.prod a)) {x}).toReal)
       = ∑ x ∈ H', (1/Nat.card H) * log ((1/Nat.card H)
-        / (Nat.card (A ∩ (t +ᵥ (H : Set G)) : Set G) / (Nat.card A * Nat.card H))) := by
+        / ((a (t +ᵥ (H : Set G))).toReal / Nat.card H)) := by
     apply Finset.sum_congr rfl (fun x hx ↦ ?_)
     have xH : x ∈ H := by simpa [H'] using hx
     have : (Measure.map U μ) {x} = 1/Nat.card H := by
@@ -614,94 +602,114 @@ private lemma rhoMinus_le_of_subgroup [IsProbabilityMeasure μ] {H : AddSubgroup
     rw [h_indep.map_add_singleton_eq_sum measurable_fst measurable_snd, Measure.map_snd_prod,
       Measure.map_fst_prod]
     simp only [measure_univ, one_smul, μ'_sing]
-    let F : Finset G := Set.Finite.toFinset (toFinite (A ∩ (t +ᵥ (H : Set G)) : Set G))
-    rw [← Finset.sum_subset (Finset.subset_univ F)]; swap
-    · intro i _ hi
-      simp only [Finite.mem_toFinset, mem_inter_iff, Finset.mem_coe, not_and, F] at hi
-      simp only [mul_eq_zero]
-      by_cases h'i : i ∈ A
-      · right
-        apply uniformOn_apply_singleton_of_nmem (fun h'x ↦ ?_)
-        apply hi h'i
-        exact ⟨x - (x-i+t), H.sub_mem xH h'x, by simp; abel⟩
-      · left
-        exact uniformOn_apply_singleton_of_nmem h'i
-    have : ∑ i ∈ F, (uniformOn ↑A) {i} * (uniformOn ↑H) {x - i + t} =
-        ∑ i ∈ F, (1 / Nat.card A * (1 / Nat.card H) : ℝ≥0∞) := by
-      apply Finset.sum_congr rfl (fun i hi ↦ ?_)
-      simp only [Finite.mem_toFinset, mem_inter_iff, Finset.mem_coe, F] at hi
-      rw [uniformOn_apply_singleton_of_mem (by exact hi.1) A.finite_toSet]
-      rw [uniformOn_apply_singleton_of_mem _ (toFinite _)]; swap
-      · convert H.sub_mem xH (mem_vadd_set_iff_neg_vadd_mem.1 hi.2) using 1
-        simp
-        abel
-      rfl
-    simp only [this, Nat.card_eq_fintype_card, Fintype.card_coe, one_div, Finset.sum_const,
-      nsmul_eq_mul, ENNReal.toReal_mul, ENNReal.toReal_nat, ENNReal.toReal_inv, div_eq_mul_inv,
-      ENNReal.one_toReal, one_mul, mul_inv]
-    congr
-    rw [Nat.card_eq_card_finite_toFinset]
+    rw [ENNReal.toReal_sum (by simp [ENNReal.mul_eq_top]), eq_div_iff cardH_ne]
+    let F : Finset G := Set.Finite.toFinset (toFinite (t +ᵥ (H : Set G)))
+    have : t +ᵥ (H : Set G) = F := by ext; simp [F]
+    rw [this, ← Finset.sum_toReal_measure_singleton, Finset.sum_mul]
+    have : ∑ i : G, (a {i} * (uniformOn ↑H) {x - i + t}).toReal * ↑(Nat.card ↥H)
+        = ∑ i ∈ F, (a {i} * (uniformOn ↑H) {x - i + t}).toReal * ↑(Nat.card ↥H) := by
+      apply (Finset.sum_subset (Finset.subset_univ _) (fun i hi hiF ↦ ?_)).symm
+      rw [uniformOn_apply_singleton_of_nmem]
+      · simp
+      simp only [Finite.mem_toFinset, mem_vadd_set_iff_neg_vadd_mem, vadd_eq_add, SetLike.mem_coe,
+        F] at hiF
+      contrapose! hiF
+      convert H.sub_mem xH hiF using 1
+      abel
+    rw [this]
+    apply Finset.sum_congr rfl (fun i hiF ↦ ?_)
+    rw [ENNReal.toReal_mul, uniformOn_apply_singleton_of_mem _ (toFinite _)]
+    · field_simp
+    simp only [Finite.mem_toFinset, mem_vadd_set_iff_neg_vadd_mem, vadd_eq_add, SetLike.mem_coe,
+      F] at hiF
+    convert H.sub_mem xH hiF using 1
+    abel
   have C : H'.card = Nat.card H := by rw [← Nat.card_eq_card_finite_toFinset]; rfl
   simp only [this, one_div, Nat.card_eq_fintype_card, Fintype.card_coe, Finset.sum_const, C,
     nsmul_eq_mul, ← mul_assoc]
-  rw [mul_inv_cancel₀, one_mul]; swap
-  · norm_cast
-    exact Nat.card_pos.ne'
-  have C₁ : Nat.card (A ∩ (t +ᵥ (H : Set G)) : Set G) ≠ 0 := by
-    have : Nonempty (A ∩ (t +ᵥ (H : Set G)) : Set G) := h'A.to_subtype
-    exact Nat.card_pos.ne'
-  have C₃ : Nat.card H ≠ 0 := Nat.card_pos.ne'
-  rw [← log_div (by positivity) (by positivity)]
-  congr 1
+  rw [mul_inv_cancel₀ cardH_ne, one_mul, ← log_inv]
+  congr
   field_simp
 
 /-- If $H$ is a finite subgroup of $G$, then
 $\rho^-(U_H) = \log |A| - \log \max_t |A \cap (H+t)|$. -/
 lemma rhoMinus_of_subgroup [IsProbabilityMeasure μ] {H : AddSubgroup G}
-    {U : Ω → G} (hunif : IsUniform H U μ) {A : Finset G} (hA : A.Nonempty) (hU : Measurable U) :
-    ρ⁻[U ; μ # A] = log (Nat.card A) -
-      log (sSup {Nat.card (A ∩ (t +ᵥ (H : Set G)) : Set G) | t : G} : ℕ) := by
-  apply le_antisymm _ (le_rhoMinus_of_subgroup hunif hA hU)
-  rcases exists_card_inter_add_eq_sSup (A := A) H hA with ⟨t, ht, hpos⟩
+    {U : Ω → G} (hunif : IsUniform H U μ) (hU : Measurable U) :
+    ρ⁻[U ; μ # a] = - log (sSup {(a (t +ᵥ (H : Set G))).toReal | t : G}) := by
+  apply le_antisymm _ (le_rhoMinus_of_subgroup hunif hU)
+  rcases exists_measure_add_eq_sSup (a := a) H with ⟨t, ht, hpos⟩
   rw [← ht]
-  have : Nonempty (A ∩ (t +ᵥ (H : Set G)) : Set G) :=  (Nat.card_pos_iff.1 hpos).1
-  exact rhoMinus_le_of_subgroup t hunif hA nonempty_of_nonempty_subtype hU
+  apply rhoMinus_le_of_subgroup t hunif hpos hU
 
 /-- If $H$ is a finite subgroup of $G$, then
 $\rho^+(U_H) = \log |H| - \log \max_t |A \cap (H+t)|$. -/
 lemma rhoPlus_of_subgroup [IsProbabilityMeasure μ] {H : AddSubgroup G}
-    {U : Ω → G} (hunif : IsUniform H U μ) {A : Finset G} (hA : A.Nonempty) (hU : Measurable U) :
-    ρ⁺[U ; μ # A] = log (Nat.card H) -
-      log (sSup {Nat.card (A ∩ (t +ᵥ (H : Set G)) : Set G) | t : G} : ℕ) := by
+    {U : Ω → G} (hunif : IsUniform H U μ) (hU : Measurable U) :
+    ρ⁺[U ; μ # a] = log (Nat.card H) - H[id ; a] -
+      log (sSup {(a (t +ᵥ (H : Set G))).toReal | t : G}) := by
   have : H[U ; μ] = log (Nat.card H) := hunif.entropy_eq' (toFinite _) hU
-  rw [rhoPlus, rhoMinus_of_subgroup hunif hA hU, this]
+  rw [rhoPlus, rhoMinus_of_subgroup hunif hU, this]
   abel
 
 /-- We define $\rho(X) := (\rho^+(X) + \rho^-(X))/2$. -/
-noncomputable def rho (X : Ω → G) (A : Finset G) (μ : Measure Ω ) : ℝ :=
-  (ρ⁻[X ; μ # A] + ρ⁺[X ; μ # A]) / 2
+noncomputable def rho (X : Ω → G) (a : Measure G) (μ : Measure Ω ) : ℝ :=
+  (ρ⁻[X ; μ # a] + ρ⁺[X ; μ # a]) / 2
 
-@[inherit_doc rho] notation3:max "ρ[" X " ; " μ " # " A "]" => rho X A μ
+@[inherit_doc rho] notation3:max "ρ[" X " ; " μ " # " a "]" => rho X a μ
 
-@[inherit_doc rho] notation3:max "ρ[" X " # " A "]" => rho X A volume
+@[inherit_doc rho] notation3:max "ρ[" X " # " a "]" => rho X a volume
 
-
+omit [IsProbabilityMeasure a] in
 lemma rho_eq_of_identDistrib {Ω' : Type*} [MeasurableSpace Ω'] {X' : Ω' → G} {μ' : Measure Ω'}
-    (h : IdentDistrib X X' μ μ') : ρ[X ; μ # A] = ρ[X' ; μ' # A] := by
+    (h : IdentDistrib X X' μ μ') : ρ[X ; μ # a] = ρ[X' ; μ' # a] := by
   simp [rho, rhoMinus_eq_of_identDistrib h, rhoPlus_eq_of_identDistrib h]
 
 /-- We have $\rho(U_A) = 0$. -/
 lemma rho_of_uniform [IsProbabilityMeasure μ]
-    {U : Ω → G} {A : Finset G} (hunif : IsUniform A U μ) (hU : Measurable U)
-    (hA : A.Nonempty) : ρ[U ; μ # A] = 0 := by
-  have : H[U ; μ] = log (Nat.card A) := hunif.entropy_eq' (toFinite _) hU
-  simp only [rho, rhoPlus, this, Nat.card_eq_fintype_card, Fintype.card_coe, add_sub_cancel_right,
-    add_self_div_two]
+    {U : Ω → G} (hunif : Measure.map U μ = a) (hU : Measurable U) : ρ[U ; μ # a] = 0 := by
+  have : H[U ; μ] = H[id ; a] := by
+    apply IdentDistrib.entropy_eq
+    exact ⟨hU.aemeasurable, aemeasurable_id, by simpa using hunif⟩
+  simp only [rho, rhoPlus, this, add_sub_cancel_right, add_self_div_two]
   apply le_antisymm _ (rhoMinus_nonneg hU)
-  have Z := rhoMinus_le hU hA (T := fun _ ↦ 0) hunif measurable_const hU
+  have Z := rhoMinus_le hU (T := fun _ ↦ 0) hunif measurable_const hU
     (indepFun_const 0).symm (μ := μ)
   have : (fun x ↦ 0) + U = U := by ext y; simp
   simpa [this] using Z
+
+lemma rho_of_subgroup_aux [IsProbabilityMeasure μ] {H : AddSubgroup G} {U : Ω → G}
+    (hunif : IsUniform H U μ) (hU : Measurable U) :
+    ρ[U ; μ # a] = (log (Nat.card H) - H[id ; a]) / 2 -
+      log (sSup {(a (t +ᵥ (H : Set G))).toReal | t : G}) := by
+  rw [rho, rhoMinus_of_subgroup hunif hU, rhoPlus_of_subgroup hunif hU]
+  ring
+
+lemma rdist_le_rho_of_uniform [IsProbabilityMeasure μ] {H : AddSubgroup G}
+    {U : Ω → G} (hunif : IsUniform H U μ) (hU : Measurable U) :
+    ρ[U ; μ # a] ≤ d[U ; μ # id ; a] := by
+  have : H[U ; μ] = log (Nat.card H) := hunif.entropy_eq' (toFinite _) hU
+  rw [rdist_symm, rdist_eq_ent_proj_add measurable_id hU (toFinite _) hunif,
+    rho_of_subgroup_aux hunif hU, this]
+  suffices H[⇑(QuotientAddGroup.mk' H) ∘ id ; a]
+      ≥ - log (sSup {(a (t +ᵥ (H : Set G))).toReal | t : G})
+    by linarith
+  let _ : Fintype (G ⧸ H) := H.fintypeQuotientOfFiniteIndex
+  set pi := ⇑(QuotientAddGroup.mk' H)
+  rw [entropy_eq_sum, tsum_fintype]
+  simp only [negMulLog, CompTriple.comp_eq, neg_mul, Finset.sum_neg_distrib, neg_le_neg_iff,
+    ge_iff_le]
+  have : IsProbabilityMeasure (Measure.map pi a) := isProbabilityMeasure_map AEMeasurable.of_discrete
+  have : ∑ x : G ⧸ H, (((Measure.map pi a) {x}).toReal
+        * log (sSup {(a (t +ᵥ (H : Set G))).toReal | t : G})) =
+      log (sSup {(a (t +ᵥ (H : Set G))).toReal | t : G}) := by simp [← Finset.sum_mul]
+  rw [← this]
+  gcongr with i hi
+  sorry
+  sorry
+
+
+
+#exit
 
 /-- If $H$ is a finite subgroup of $G$, and $\rho(U_H) \leq r$, then there exists $t$ such
 that $|A \cap (H+t)| \geq e^{-r} \sqrt{|A||H|}$, and $|H|/|A| \in [e^{-2r}, e^{2r}]$. -/
